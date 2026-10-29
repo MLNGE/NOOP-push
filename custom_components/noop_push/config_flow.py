@@ -19,7 +19,7 @@ from .const import (
 )
 
 
-class NoopPushConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a NOOP Push config flow."""
 
     VERSION = 1
