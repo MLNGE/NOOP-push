@@ -8,7 +8,7 @@ from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN, STORAGE_KEY, STORAGE_VERSION
 from .coordinator import NoopPushCoordinator
-from .http import NoopPushView
+from .http import NoopPushView, _latest_entities
 
 PLATFORMS: list[str] = ["sensor", "binary_sensor"]
 
@@ -25,10 +25,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = await store.async_load() or {}
     data.setdefault("receiverStateId", entry.data["receiverStateId"])
     data.setdefault("version", STORAGE_VERSION)
+    if data.get("records"):
+        data["latest"] = _latest_entities(data["records"])
     await store.async_save(data)
 
     coordinator = NoopPushCoordinator(hass)
-    coordinator.data = data.get("latest", {})
+    coordinator.async_set_updated_data(data.get("latest", {}))
     view = hass.data[DOMAIN].get("http_view")
     if view is None:
         view = NoopPushView(hass, entry, store, data["receiverStateId"], coordinator)
