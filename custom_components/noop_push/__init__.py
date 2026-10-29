@@ -25,7 +25,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = await store.async_load() or {}
     data.setdefault("receiverStateId", entry.data["receiverStateId"])
     data.setdefault("version", STORAGE_VERSION)
-    canonical_device_id = entry.options.get("canonical_device_id", "")
+    canonical_device_id = entry.options.get(
+        "canonical_device_id", entry.data.get("canonical_device_id", "")
+    )
     if canonical_device_id:
         for record in data.get("records", {}).values():
             record["deviceId"] = canonical_device_id
