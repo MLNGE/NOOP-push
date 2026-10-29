@@ -117,10 +117,8 @@ class NoopPushView(HomeAssistantView):
             return _error(415, ERROR_UNSUPPORTED_MEDIA_TYPE)
         try:
             encoded = await request.read()
-            decoded = gzip.decompress(encoded) if request.headers.get(
-                "Content-Encoding", ""
-            ).lower() == "gzip" else encoded
-        except (OSError, EOFError):
+            decoded = _decode_payload(encoded, request.headers.get("Content-Encoding", ""))
+        except (OSError, EOFError, ValueError):
             return _error(400, ERROR_INVALID_GZIP)
         if len(decoded) > MAX_DECODED_PAYLOAD:
             return _error(413, ERROR_PAYLOAD_TOO_LARGE)
@@ -217,6 +215,20 @@ def _parse_ndjson(payload: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]]
     if not objects or any(not isinstance(item, dict) for item in objects):
         raise ValueError(ERROR_MALFORMED_NDJSON)
     return objects[0], objects[1:]
+
+
+def _decode_payload(payload: bytes, content_encoding: str) -> bytes:
+    """Decode gzip while tolerating aiohttp/proxy pre-decompression."""
+    if content_encoding.lower() != "gzip":
+        return payload
+    if payload[:2] == b"\x1f\x8b":
+        try:
+            return gzip.decompress(payload)
+        except (OSError, EOFError):
+            raise ValueError(ERROR_INVALID_GZIP) from None
+    if payload.lstrip().startswith(b"{"):
+        return payload
+    raise ValueError(ERROR_INVALID_GZIP)
 
 
 def _validate_batch(
