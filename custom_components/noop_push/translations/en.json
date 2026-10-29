@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "NOOP Push",
+        "description": "Endpoint: {endpoint}",
+        "data": {
+          "token": "Bearer token",
+          "streams": "Enabled streams",
+          "detailed_daily": "Create detailed daily sensors",
+          "retention_days": "Append retention (days)"
+        }
+      }
+    },
+    "error": {
+      "required": "A non-empty token is required"
+    }
+  }
+}
