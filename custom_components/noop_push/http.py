@@ -61,8 +61,8 @@ class NoopPushView(HomeAssistantView):
         self.coordinator = coordinator
         self._lock = Lock()
         self._active = True
-        self._entity_adder = None
-        self._known_entity_keys: set[str] = set()
+        self._entity_adders: dict[str, Any] = {}
+        self._known_entity_keys: dict[str, set[str]] = {}
 
     def configure(
         self,
@@ -82,10 +82,12 @@ class NoopPushView(HomeAssistantView):
         """Disable requests after the config entry unloads."""
         self._active = False
 
-    def set_entity_adder(self, entity_adder, known_entity_keys: set[str]) -> None:
-        """Register the platform callback used for newly discovered devices."""
-        self._entity_adder = entity_adder
-        self._known_entity_keys = known_entity_keys
+    def set_entity_adder(
+        self, platform: str, entity_adder, known_entity_keys: set[str]
+    ) -> None:
+        """Register a platform callback for newly discovered devices."""
+        self._entity_adders[platform] = entity_adder
+        self._known_entity_keys[platform] = known_entity_keys
 
     async def get(self, request: web.Request) -> web.Response:
         """Return capabilities for a valid protocol request."""
@@ -178,14 +180,7 @@ class NoopPushView(HomeAssistantView):
                 await self.store.async_save(data)
                 if self.coordinator is not None:
                     self.coordinator.async_set_updated_data(data["latest"])
-                    if self._entity_adder is not None:
-                        from .sensor import create_entities
-
-                        new_entities = create_entities(
-                            self.coordinator, data["latest"], self._known_entity_keys
-                        )
-                        if new_entities:
-                            self._entity_adder(new_entities)
+                    self._add_new_entities(data["latest"])
                 return web.json_response(ack)
             except (OSError, TypeError, ValueError):
                 return _error(500, ERROR_INTERNAL)
@@ -288,6 +283,7 @@ class NoopPushView(HomeAssistantView):
                 await self.store.async_save(data)
                 if self.coordinator is not None:
                     self.coordinator.async_set_updated_data(data["latest"])
+                    self._add_new_entities(data["latest"])
                 return web.json_response(ack)
         except ValueError as err:
             code = str(err)
@@ -307,6 +303,27 @@ class NoopPushView(HomeAssistantView):
         ):
             return _error(401, ERROR_UNAUTHORIZED)
         return None
+
+    def _add_new_entities(self, data: dict[str, Any]) -> None:
+        """Create entities for streams discovered after platform setup."""
+        from .binary_sensor import create_entities as create_binary_entities
+        from .sensor import create_entities as create_sensor_entities
+
+        creators = {
+            "sensor": create_sensor_entities,
+            "binary_sensor": create_binary_entities,
+        }
+        for platform, creator in creators.items():
+            callback = self._entity_adders.get(platform)
+            if callback is None:
+                continue
+            entities = creator(
+                self.coordinator,
+                data,
+                self._known_entity_keys.setdefault(platform, set()),
+            )
+            if entities:
+                callback(entities)
 
 
 def _error(status: int, code: str) -> web.Response:
@@ -464,14 +481,19 @@ def _record_key(header: dict[str, Any], record: dict[str, Any]) -> str:
 def _latest_entities(records: dict[str, dict[str, Any]]) -> dict[str, Any]:
     latest: dict[str, Any] = {}
     for record in records.values():
-        scope = (record["deviceId"], record["stream"])
+        scope = (record["sourceId"], record["deviceId"], record["stream"])
         current = latest.get(scope)
         if current is None or _latest_key(record) > _latest_key(current):
             latest[scope] = record
-    return {f"{device}:{stream}": record for (device, stream), record in latest.items()}
+    return {
+        f"{source}|{device}|{stream}": record
+        for (source, device, stream), record in latest.items()
+    }
 
 
 def _latest_key(record: dict[str, Any]) -> Any:
     """Return the natural-key value used to select the latest record."""
     primary_key = record["primaryKey"]
+    if "endTs" in record["payload"] and record["payload"].get("endTs") is not None:
+        return record["payload"]["endTs"]
     return primary_key.get("ts", primary_key.get("day", primary_key.get("startTs")))
