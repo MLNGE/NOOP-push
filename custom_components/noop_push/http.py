@@ -53,12 +53,14 @@ class NoopPushView(HomeAssistantView):
         store: Store,
         receiver_state_id: str,
         coordinator: NoopPushCoordinator | None = None,
+        canonical_device_id: str = "",
     ) -> None:
         self.hass = hass
         self.entry = entry
         self.store = store
         self.receiver_state_id = receiver_state_id
         self.coordinator = coordinator
+        self.canonical_device_id = canonical_device_id.strip()
         self._lock = Lock()
         self._active = True
         self._entity_adders: dict[str, Any] = {}
@@ -70,12 +72,14 @@ class NoopPushView(HomeAssistantView):
         store: Store,
         receiver_state_id: str,
         coordinator: NoopPushCoordinator,
+        canonical_device_id: str = "",
     ) -> None:
         """Attach the view to an active config entry."""
         self.entry = entry
         self.store = store
         self.receiver_state_id = receiver_state_id
         self.coordinator = coordinator
+        self.canonical_device_id = canonical_device_id.strip()
         self._active = True
 
     def deactivate(self) -> None:
@@ -138,6 +142,7 @@ class NoopPushView(HomeAssistantView):
             return await self._replace(header, records, decoded)
 
         payload_hash = hashlib.sha256(decoded).hexdigest()
+        storage_header = self._storage_header(header)
         async with self._lock:
             try:
                 data = await self.store.async_load() or {}
@@ -151,15 +156,15 @@ class NoopPushView(HomeAssistantView):
                 stored_records = data.setdefault("records", {})
                 batch_keys = set()
                 for record in records:
-                    key = _record_key(header, record)
+                    key = _record_key(storage_header, record)
                     if key in batch_keys or key in stored_records:
                         return _error(409, ERROR_DUPLICATE_KEY)
                     batch_keys.add(key)
                 for record in records:
-                    key = _record_key(header, record)
+                    key = _record_key(storage_header, record)
                     stored_records[key] = {
                         "sourceId": header["sourceId"],
-                        "deviceId": header["deviceId"],
+                        "deviceId": storage_header["deviceId"],
                         "stream": header["stream"],
                         "primaryKey": record["key"],
                         "payload": record["data"],
@@ -191,6 +196,7 @@ class NoopPushView(HomeAssistantView):
         """Stage and atomically apply a complete replacement window."""
         try:
             _validate_replacement(header, records)
+            storage_header = self._storage_header(header)
             async with self._lock:
                 data = await self.store.async_load() or {}
                 acknowledgements = data.setdefault("acknowledgements", {})
@@ -203,7 +209,7 @@ class NoopPushView(HomeAssistantView):
                     return _error(409, ERROR_REPLACEMENT_CONFLICT)
 
                 staging = data.setdefault("replacement_staging", {})
-                scope = _replacement_scope(header)
+                scope = _replacement_scope(storage_header)
                 for key in list(staging):
                     if key.startswith(scope + "|") and key != (
                         scope + "|" + header["window"]["replacementId"]
@@ -245,20 +251,20 @@ class NoopPushView(HomeAssistantView):
                     for record in stage["parts"][str(part)]["records"]
                 ]
                 record_keys = {
-                    _record_key(header, record) for record in complete_records
+                    _record_key(storage_header, record) for record in complete_records
                 }
                 if len(record_keys) != len(complete_records):
                     return _error(409, ERROR_DUPLICATE_KEY)
                 stored_records = data.setdefault("records", {})
                 for key in list(stored_records):
                     stored = stored_records[key]
-                    if _in_replacement_window(stored, header):
+                    if _in_replacement_window(stored, storage_header):
                         if key not in record_keys:
                             del stored_records[key]
                 for record in complete_records:
-                    stored_records[_record_key(header, record)] = {
-                        "sourceId": header["sourceId"],
-                        "deviceId": header["deviceId"],
+                    stored_records[_record_key(storage_header, record)] = {
+                        "sourceId": storage_header["sourceId"],
+                        "deviceId": storage_header["deviceId"],
                         "stream": header["stream"],
                         "primaryKey": record["key"],
                         "payload": record["data"],
@@ -293,6 +299,12 @@ class NoopPushView(HomeAssistantView):
             )
         except (OSError, TypeError, KeyError):
             return _error(500, ERROR_INTERNAL)
+
+    def _storage_header(self, header: dict[str, Any]) -> dict[str, Any]:
+        """Return the header scope used for persistence and entities."""
+        if not self.canonical_device_id:
+            return header
+        return {**header, "deviceId": self.canonical_device_id}
 
     def _authorize(self, request: web.Request) -> web.Response | None:
         authorization = request.headers.get("Authorization", "")
