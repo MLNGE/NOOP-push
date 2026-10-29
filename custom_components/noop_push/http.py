@@ -26,6 +26,7 @@ from .const import (
     ERROR_MALFORMED_NDJSON,
     ERROR_PAYLOAD_TOO_LARGE,
     ERROR_RECORD_COUNT_MISMATCH,
+    ERROR_REPLACEMENT_CONFLICT,
     ERROR_UNAUTHORIZED,
     ERROR_UNSUPPORTED_MEDIA_TYPE,
     ERROR_UNSUPPORTED_STREAM,
@@ -33,6 +34,7 @@ from .const import (
     MAX_DECODED_PAYLOAD,
     MAX_RECORDS,
     PROTOCOL_VERSION,
+    REPLACEMENT_STREAMS,
 )
 from .coordinator import NoopPushCoordinator
 
@@ -129,7 +131,9 @@ class NoopPushView(HomeAssistantView):
             code = str(err)
             return _error(422 if code == ERROR_UNSUPPORTED_STREAM else 400, code)
         if header["stream"] not in APPEND_STREAMS:
-            return _error(422, ERROR_UNSUPPORTED_STREAM)
+            if header["stream"] not in REPLACEMENT_STREAMS:
+                return _error(422, ERROR_UNSUPPORTED_STREAM)
+            return await self._replace(header, records, decoded)
 
         payload_hash = hashlib.sha256(decoded).hexdigest()
         async with self._lock:
@@ -185,6 +189,114 @@ class NoopPushView(HomeAssistantView):
                 return web.json_response(ack)
             except (OSError, TypeError, ValueError):
                 return _error(500, ERROR_INTERNAL)
+
+    async def _replace(
+        self, header: dict[str, Any], records: list[dict[str, Any]], decoded: bytes
+    ) -> web.Response:
+        """Stage and atomically apply a complete replacement window."""
+        try:
+            _validate_replacement(header, records)
+            async with self._lock:
+                data = await self.store.async_load() or {}
+                acknowledgements = data.setdefault("acknowledgements", {})
+                ack_key = _scope_key(header)
+                payload_hash = hashlib.sha256(decoded).hexdigest()
+                prior = acknowledgements.get(ack_key)
+                if prior is not None:
+                    if prior["payloadHash"] == payload_hash:
+                        return web.json_response(prior["ack"])
+                    return _error(409, ERROR_REPLACEMENT_CONFLICT)
+
+                staging = data.setdefault("replacement_staging", {})
+                scope = _replacement_scope(header)
+                for key in list(staging):
+                    if key.startswith(scope + "|") and key != (
+                        scope + "|" + header["window"]["replacementId"]
+                    ):
+                        del staging[key]
+                stage_key = scope + "|" + header["window"]["replacementId"]
+                stage = staging.setdefault(
+                    stage_key,
+                    {
+                        "header": header,
+                        "parts": {},
+                    },
+                )
+                if _replacement_window_identity(
+                    stage["header"]["window"]
+                ) != _replacement_window_identity(header["window"]):
+                    return _error(409, ERROR_REPLACEMENT_CONFLICT)
+                part_key = str(header["window"]["part"])
+                existing_part = stage["parts"].get(part_key)
+                if existing_part is not None:
+                    if existing_part["payloadHash"] == payload_hash:
+                        return _error(409, ERROR_REPLACEMENT_CONFLICT)
+                    return _error(409, ERROR_REPLACEMENT_CONFLICT)
+                stage["parts"][part_key] = {
+                    "payloadHash": payload_hash,
+                    "records": records,
+                }
+                window = header["window"]
+                if len(stage["parts"]) != window["parts"] or any(
+                    str(part) not in stage["parts"]
+                    for part in range(1, window["parts"] + 1)
+                ):
+                    await self.store.async_save(data)
+                    return _error(409, ERROR_REPLACEMENT_CONFLICT)
+
+                complete_records = [
+                    record
+                    for part in range(1, window["parts"] + 1)
+                    for record in stage["parts"][str(part)]["records"]
+                ]
+                record_keys = {
+                    _record_key(header, record) for record in complete_records
+                }
+                if len(record_keys) != len(complete_records):
+                    return _error(409, ERROR_DUPLICATE_KEY)
+                stored_records = data.setdefault("records", {})
+                for key in list(stored_records):
+                    stored = stored_records[key]
+                    if _in_replacement_window(stored, header):
+                        if key not in record_keys:
+                            del stored_records[key]
+                for record in complete_records:
+                    stored_records[_record_key(header, record)] = {
+                        "sourceId": header["sourceId"],
+                        "deviceId": header["deviceId"],
+                        "stream": header["stream"],
+                        "primaryKey": record["key"],
+                        "payload": record["data"],
+                        "endCursor": None,
+                        "batchId": header["batchId"],
+                    }
+                ack = {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "batchId": header["batchId"],
+                    "stream": header["stream"],
+                    "deviceId": header["deviceId"],
+                    "endCursor": None,
+                    "acceptedRows": len(records),
+                    "status": "accepted",
+                }
+                acknowledgements[ack_key] = {
+                    "payloadHash": payload_hash,
+                    "ack": ack,
+                }
+                del staging[stage_key]
+                data["latest"] = _latest_entities(stored_records)
+                await self.store.async_save(data)
+                if self.coordinator is not None:
+                    self.coordinator.async_set_updated_data(data["latest"])
+                return web.json_response(ack)
+        except ValueError as err:
+            code = str(err)
+            return _error(
+                409 if code == ERROR_REPLACEMENT_CONFLICT else 400,
+                code,
+            )
+        except (OSError, TypeError, KeyError):
+            return _error(500, ERROR_INTERNAL)
 
     def _authorize(self, request: web.Request) -> web.Response | None:
         authorization = request.headers.get("Authorization", "")
@@ -242,9 +354,9 @@ def _validate_batch(
         raise ValueError(ERROR_MALFORMED_NDJSON)
     if header["protocolVersion"] != PROTOCOL_VERSION:
         raise ValueError(ERROR_MALFORMED_NDJSON)
-    if header["delivery"] != "append" or header["stream"] not in enabled:
+    if header["delivery"] not in {"append", "replace_window"} or header["stream"] not in enabled:
         raise ValueError(ERROR_UNSUPPORTED_STREAM)
-    if not isinstance(header["recordCount"], int) or not 1 <= header["recordCount"] <= MAX_RECORDS:
+    if not isinstance(header["recordCount"], int) or not 0 <= header["recordCount"] <= MAX_RECORDS:
         raise ValueError(ERROR_RECORD_COUNT_MISMATCH)
     if header["recordCount"] != len(records):
         raise ValueError(ERROR_RECORD_COUNT_MISMATCH)
@@ -256,8 +368,82 @@ def _validate_batch(
         for item in records
     ):
         raise ValueError(ERROR_MALFORMED_NDJSON)
-    if any(set(record["key"]) != {"ts"} for record in records):
+    if header["delivery"] == "append" and (
+        header["recordCount"] < 1 or any(set(record["key"]) != {"ts"} for record in records)
+    ):
         raise ValueError(ERROR_MALFORMED_NDJSON)
+
+
+def _validate_replacement(
+    header: dict[str, Any], records: list[dict[str, Any]]
+) -> None:
+    if header["stream"] not in REPLACEMENT_STREAMS:
+        raise ValueError(ERROR_UNSUPPORTED_STREAM)
+    window = header.get("window")
+    if not isinstance(window, dict) or not {
+        "replacementId", "selector", "startInclusive", "endExclusive",
+        "part", "parts",
+    }.issubset(window):
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+    if window["selector"] not in {"day", "startTs"}:
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+    if (
+        not isinstance(window["part"], int)
+        or not isinstance(window["parts"], int)
+        or window["parts"] < 1
+        or not 1 <= window["part"] <= window["parts"]
+    ):
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+    if header["startCursor"] is not None or header["endCursor"] is not None:
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+    key_name = "day" if header["stream"] == "dailyMetric" else "startTs"
+    if any(set(record["key"]) != {key_name} for record in records):
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+    if window["selector"] != ("day" if key_name == "day" else "startTs"):
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+    if any(
+        not _key_in_window(record["key"][key_name], window)
+        for record in records
+    ):
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+
+
+def _replacement_scope(header: dict[str, Any]) -> str:
+    return json.dumps(
+        [header["sourceId"], header["deviceId"], header["stream"]],
+        separators=(",", ":"),
+    )
+
+
+def _replacement_window_identity(window: dict[str, Any]) -> dict[str, Any]:
+    """Return replacement bounds and identity without the current part number."""
+    return {
+        key: window[key]
+        for key in (
+            "replacementId",
+            "selector",
+            "startInclusive",
+            "endExclusive",
+            "parts",
+        )
+    }
+
+
+def _key_in_window(value: Any, window: dict[str, Any]) -> bool:
+    return window["startInclusive"] <= value < window["endExclusive"]
+
+
+def _in_replacement_window(
+    stored: dict[str, Any], header: dict[str, Any]
+) -> bool:
+    if (
+        stored["sourceId"] != header["sourceId"]
+        or stored["deviceId"] != header["deviceId"]
+        or stored["stream"] != header["stream"]
+    ):
+        return False
+    key_name = "day" if header["stream"] == "dailyMetric" else "startTs"
+    return _key_in_window(stored["primaryKey"].get(key_name), header["window"])
 
 
 def _scope_key(header: dict[str, Any]) -> str:
@@ -280,6 +466,12 @@ def _latest_entities(records: dict[str, dict[str, Any]]) -> dict[str, Any]:
     for record in records.values():
         scope = (record["deviceId"], record["stream"])
         current = latest.get(scope)
-        if current is None or record["primaryKey"]["ts"] > current["primaryKey"]["ts"]:
+        if current is None or _latest_key(record) > _latest_key(current):
             latest[scope] = record
     return {f"{device}:{stream}": record for (device, stream), record in latest.items()}
+
+
+def _latest_key(record: dict[str, Any]) -> Any:
+    """Return the natural-key value used to select the latest record."""
+    primary_key = record["primaryKey"]
+    return primary_key.get("ts", primary_key.get("day", primary_key.get("startTs")))

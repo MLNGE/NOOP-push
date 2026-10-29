@@ -27,7 +27,9 @@ ERROR_UNSUPPORTED_STREAM = "unsupported_stream"
 ERROR_RECORD_COUNT_MISMATCH = "record_count_mismatch"
 ERROR_DUPLICATE_KEY = "duplicate_key"
 ERROR_INTERNAL = "internal_error"
+ERROR_REPLACEMENT_CONFLICT = "replacement_conflict"
 
 APPEND_STREAMS = ("hrSample", "battery")
 MAX_DECODED_PAYLOAD = 4 * 1024 * 1024
 MAX_RECORDS = 5000
+REPLACEMENT_STREAMS = ("dailyMetric", "sleepSession")

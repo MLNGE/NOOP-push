@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from homeassistant.const import PERCENTAGE, UnitOfTime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -38,6 +39,10 @@ def create_entities(coordinator, data: dict, known: set[str]) -> list:
             field, suffix, device_class = "bpm", "heart_rate", SensorDeviceClass.HEART_RATE
         elif stream == "battery":
             field, suffix, device_class = "soc", "battery", SensorDeviceClass.BATTERY
+        elif stream == "dailyMetric":
+            field, suffix, device_class = "recovery", "recovery", None
+        elif stream == "sleepSession":
+            field, suffix, device_class = "endTs", "last_sleep_end", None
         else:
             continue
         unique_id = f"noop_push_{device_id}_{suffix}"
@@ -65,8 +70,13 @@ class NoopPushMetricSensor(CoordinatorEntity, NoopPushEntity):
         self._field = field
         self._attr_unique_id = f"noop_push_{device_id}_{suffix}"
         self._attr_name = f"NOOP {suffix.replace('_', ' ').title()}"
-        self._attr_device_class = device_class
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        if device_class is not None:
+            self._attr_device_class = device_class
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+        if stream == "battery":
+            self._attr_native_unit_of_measurement = PERCENTAGE
+        elif stream == "sleepSession":
+            self._attr_native_unit_of_measurement = UnitOfTime.SECONDS
 
     @property
     def native_value(self):
