@@ -62,5 +62,24 @@ class NoopPushChargingSensor(CoordinatorEntity, NoopPushEntity):
 
     @property
     def is_on(self):
-        record = self.coordinator.data.get(self._key)
+        record = _find_record(self.coordinator.data, self._key)
         return record.get("payload", {}).get("charging") if record else None
+
+
+def _find_record(data: dict, key: str) -> dict | None:
+    """Find a latest record across current and legacy coordinator keys."""
+    record = data.get(key)
+    if record is not None:
+        return record
+    _, device_id, stream = key.split("|", 2)
+    record = data.get(f"{device_id}:{stream}")
+    if record is not None:
+        return record
+    for candidate in data.values():
+        if (
+            isinstance(candidate, dict)
+            and candidate.get("deviceId") == device_id
+            and candidate.get("stream") == stream
+        ):
+            return candidate
+    return None
