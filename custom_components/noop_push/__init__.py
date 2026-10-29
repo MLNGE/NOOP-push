@@ -25,17 +25,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = await store.async_load() or {}
     data.setdefault("receiverStateId", entry.data["receiverStateId"])
     data.setdefault("version", STORAGE_VERSION)
-    canonical_device_id = entry.options.get(
-        "canonical_device_id", entry.data.get("canonical_device_id", "")
-    )
-    if canonical_device_id:
-        for record in data.get("records", {}).values():
-            record["deviceId"] = canonical_device_id
-        data["records"] = {
-            _canonical_record_key(key, record, canonical_device_id)
-            for key, record in data.get("records", {}).items()
-        }
-        data["records"] = dict(data["records"])
+    for record in data.get("records", {}).values():
+        record["deviceId"] = record["sourceId"]
+    data["records"] = {
+        _logical_record_key(record): record
+        for record in data.get("records", {}).values()
+    }
     if data.get("records"):
         data["latest"] = _latest_entities(data["records"])
     await store.async_save(data)
@@ -45,13 +40,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     view = hass.data[DOMAIN].get("http_view")
     if view is None:
         view = NoopPushView(
-            hass, entry, store, data["receiverStateId"], coordinator, canonical_device_id
+            hass, entry, store, data["receiverStateId"], coordinator
         )
         hass.http.register_view(view)
         hass.data[DOMAIN]["http_view"] = view
     else:
         view.configure(
-            entry, store, data["receiverStateId"], coordinator, canonical_device_id
+            entry, store, data["receiverStateId"], coordinator
         )
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "store": store,
@@ -73,13 +68,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
-def _canonical_record_key(key, record, canonical_device_id):
-    """Rebuild a record key after canonicalizing its device scope."""
+def _logical_record_key(record):
+    """Build a key for the automatic source-scoped logical device."""
     from .http import _record_key
 
     header = {
         "sourceId": record["sourceId"],
-        "deviceId": canonical_device_id,
+        "deviceId": record["sourceId"],
         "stream": record["stream"],
     }
     return _record_key(header, {"key": record["primaryKey"]}), record

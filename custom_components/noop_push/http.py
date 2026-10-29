@@ -53,14 +53,12 @@ class NoopPushView(HomeAssistantView):
         store: Store,
         receiver_state_id: str,
         coordinator: NoopPushCoordinator | None = None,
-        canonical_device_id: str = "",
     ) -> None:
         self.hass = hass
         self.entry = entry
         self.store = store
         self.receiver_state_id = receiver_state_id
         self.coordinator = coordinator
-        self.canonical_device_id = canonical_device_id.strip()
         self._lock = Lock()
         self._active = True
         self._entity_adders: dict[str, Any] = {}
@@ -72,14 +70,12 @@ class NoopPushView(HomeAssistantView):
         store: Store,
         receiver_state_id: str,
         coordinator: NoopPushCoordinator,
-        canonical_device_id: str = "",
     ) -> None:
         """Attach the view to an active config entry."""
         self.entry = entry
         self.store = store
         self.receiver_state_id = receiver_state_id
         self.coordinator = coordinator
-        self.canonical_device_id = canonical_device_id.strip()
         self._active = True
 
     def deactivate(self) -> None:
@@ -301,10 +297,8 @@ class NoopPushView(HomeAssistantView):
             return _error(500, ERROR_INTERNAL)
 
     def _storage_header(self, header: dict[str, Any]) -> dict[str, Any]:
-        """Return the header scope used for persistence and entities."""
-        if not self.canonical_device_id:
-            return header
-        return {**header, "deviceId": self.canonical_device_id}
+        """Group all device IDs from one NOOP installation together."""
+        return {**header, "deviceId": header["sourceId"]}
 
     def _authorize(self, request: web.Request) -> web.Response | None:
         authorization = request.headers.get("Authorization", "")

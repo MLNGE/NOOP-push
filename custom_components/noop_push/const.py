@@ -16,7 +16,6 @@ CONF_STREAMS = "streams"
 CONF_DETAILED_DAILY = "detailed_daily"
 CONF_RETENTION_DAYS = "retention_days"
 CONF_RECEIVER_STATE_ID = "receiverStateId"
-CONF_CANONICAL_DEVICE_ID = "canonical_device_id"
 
 ERROR_UNAUTHORIZED = "unauthorized"
 ERROR_UNSUPPORTED_PROTOCOL = "unsupported_protocol_version"

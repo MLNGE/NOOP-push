@@ -9,7 +9,6 @@
           "streams": "Enabled streams",
           "detailed_daily": "Create detailed daily sensors",
           "retention_days": "Append retention (days)"
-          ,"canonical_device_id": "Canonical device ID"
         }
       }
     },
