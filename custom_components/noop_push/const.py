@@ -19,4 +19,15 @@ CONF_RECEIVER_STATE_ID = "receiverStateId"
 
 ERROR_UNAUTHORIZED = "unauthorized"
 ERROR_UNSUPPORTED_PROTOCOL = "unsupported_protocol_version"
+ERROR_UNSUPPORTED_MEDIA_TYPE = "unsupported_media_type"
+ERROR_INVALID_GZIP = "invalid_gzip"
+ERROR_PAYLOAD_TOO_LARGE = "payload_too_large"
+ERROR_MALFORMED_NDJSON = "malformed_ndjson"
+ERROR_UNSUPPORTED_STREAM = "unsupported_stream"
+ERROR_RECORD_COUNT_MISMATCH = "record_count_mismatch"
+ERROR_DUPLICATE_KEY = "duplicate_key"
+ERROR_INTERNAL = "internal_error"
 
+APPEND_STREAMS = ("hrSample", "battery")
+MAX_DECODED_PAYLOAD = 4 * 1024 * 1024
+MAX_RECORDS = 5000

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import gzip
+import hashlib
+import json
 import secrets
+from asyncio import Lock
 from typing import Any
 
 from aiohttp import web
@@ -12,13 +16,25 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .const import (
+    APPEND_STREAMS,
     CONF_STREAMS,
     CONF_TOKEN,
     ENDPOINT,
+    ERROR_DUPLICATE_KEY,
+    ERROR_INTERNAL,
+    ERROR_INVALID_GZIP,
+    ERROR_MALFORMED_NDJSON,
+    ERROR_PAYLOAD_TOO_LARGE,
+    ERROR_RECORD_COUNT_MISMATCH,
     ERROR_UNAUTHORIZED,
+    ERROR_UNSUPPORTED_MEDIA_TYPE,
+    ERROR_UNSUPPORTED_STREAM,
     ERROR_UNSUPPORTED_PROTOCOL,
+    MAX_DECODED_PAYLOAD,
+    MAX_RECORDS,
     PROTOCOL_VERSION,
 )
+from .coordinator import NoopPushCoordinator
 
 
 class NoopPushView(HomeAssistantView):
@@ -34,11 +50,21 @@ class NoopPushView(HomeAssistantView):
         entry: ConfigEntry,
         store: Store,
         receiver_state_id: str,
+        coordinator: NoopPushCoordinator | None = None,
     ) -> None:
         self.hass = hass
         self.entry = entry
         self.store = store
         self.receiver_state_id = receiver_state_id
+        self.coordinator = coordinator
+        self._lock = Lock()
+        self._entity_adder = None
+        self._known_entity_keys: set[str] = set()
+
+    def set_entity_adder(self, entity_adder, known_entity_keys: set[str]) -> None:
+        """Register the platform callback used for newly discovered devices."""
+        self._entity_adder = entity_adder
+        self._known_entity_keys = known_entity_keys
 
     async def get(self, request: web.Request) -> web.Response:
         """Return capabilities for a valid protocol request."""
@@ -60,11 +86,84 @@ class NoopPushView(HomeAssistantView):
         )
 
     async def post(self, request: web.Request) -> web.Response:
-        """Reject ingestion until Milestone 2 implements it."""
+        """Ingest an append batch."""
         error = self._authorize(request)
         if error is not None:
             return error
-        return _error(501, "not_implemented")
+        if request.content_type != "application/x-ndjson":
+            return _error(415, ERROR_UNSUPPORTED_MEDIA_TYPE)
+        try:
+            encoded = await request.read()
+            decoded = gzip.decompress(encoded) if request.headers.get(
+                "Content-Encoding", ""
+            ).lower() == "gzip" else encoded
+        except (OSError, EOFError):
+            return _error(400, ERROR_INVALID_GZIP)
+        if len(decoded) > MAX_DECODED_PAYLOAD:
+            return _error(413, ERROR_PAYLOAD_TOO_LARGE)
+        try:
+            header, records = _parse_ndjson(decoded)
+            _validate_batch(header, records, self.entry.data[CONF_STREAMS])
+        except ValueError as err:
+            code = str(err)
+            return _error(422 if code == ERROR_UNSUPPORTED_STREAM else 400, code)
+        if header["stream"] not in APPEND_STREAMS:
+            return _error(422, ERROR_UNSUPPORTED_STREAM)
+
+        payload_hash = hashlib.sha256(decoded).hexdigest()
+        async with self._lock:
+            try:
+                data = await self.store.async_load() or {}
+                acknowledgements = data.setdefault("acknowledgements", {})
+                ack_key = _scope_key(header)
+                prior = acknowledgements.get(ack_key)
+                if prior is not None:
+                    if prior["payloadHash"] == payload_hash:
+                        return web.json_response(prior["ack"])
+                    return _error(409, ERROR_DUPLICATE_KEY)
+                stored_records = data.setdefault("records", {})
+                batch_keys = set()
+                for record in records:
+                    key = _record_key(header, record)
+                    if key in batch_keys or key in stored_records:
+                        return _error(409, ERROR_DUPLICATE_KEY)
+                    batch_keys.add(key)
+                for record in records:
+                    key = _record_key(header, record)
+                    stored_records[key] = {
+                        "sourceId": header["sourceId"],
+                        "deviceId": header["deviceId"],
+                        "stream": header["stream"],
+                        "primaryKey": record["key"],
+                        "payload": record["data"],
+                        "endCursor": header["endCursor"],
+                        "batchId": header["batchId"],
+                    }
+                ack = {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "batchId": header["batchId"],
+                    "stream": header["stream"],
+                    "deviceId": header["deviceId"],
+                    "endCursor": header["endCursor"],
+                    "acceptedRows": len(records),
+                    "status": "accepted",
+                }
+                acknowledgements[ack_key] = {"payloadHash": payload_hash, "ack": ack}
+                data["latest"] = _latest_entities(stored_records)
+                await self.store.async_save(data)
+                if self.coordinator is not None:
+                    self.coordinator.async_set_updated_data(data["latest"])
+                    if self._entity_adder is not None:
+                        from .sensor import create_entities
+
+                        new_entities = create_entities(
+                            self.coordinator, data["latest"], self._known_entity_keys
+                        )
+                        if new_entities:
+                            self._entity_adder(new_entities)
+                return web.json_response(ack)
+            except (OSError, TypeError, ValueError):
+                return _error(500, ERROR_INTERNAL)
 
     def _authorize(self, request: web.Request) -> web.Response | None:
         authorization = request.headers.get("Authorization", "")
@@ -82,3 +181,70 @@ def _error(status: int, code: str) -> web.Response:
         {"type": "error", "protocolVersion": PROTOCOL_VERSION, "code": code},
         status=status,
     )
+
+
+def _parse_ndjson(payload: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    if not payload or not payload.endswith(b"\n") or payload.startswith(b"\xef\xbb\xbf"):
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+    lines = payload[:-1].split(b"\n")
+    try:
+        objects = [json.loads(line) for line in lines]
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError(ERROR_MALFORMED_NDJSON) from None
+    if not objects or any(not isinstance(item, dict) for item in objects):
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+    return objects[0], objects[1:]
+
+
+def _validate_batch(
+    header: dict[str, Any], records: list[dict[str, Any]], enabled: list[str]
+) -> None:
+    required = {
+        "type", "protocolVersion", "batchId", "sourceId", "deviceId",
+        "stream", "delivery", "recordCount", "startCursor", "endCursor",
+    }
+    if set(header) < required or header["type"] != "batch":
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+    if header["protocolVersion"] != PROTOCOL_VERSION:
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+    if header["delivery"] != "append" or header["stream"] not in enabled:
+        raise ValueError(ERROR_UNSUPPORTED_STREAM)
+    if not isinstance(header["recordCount"], int) or not 1 <= header["recordCount"] <= MAX_RECORDS:
+        raise ValueError(ERROR_RECORD_COUNT_MISMATCH)
+    if header["recordCount"] != len(records):
+        raise ValueError(ERROR_RECORD_COUNT_MISMATCH)
+    if not all(
+        isinstance(item, dict)
+        and item.get("type") == "record"
+        and isinstance(item.get("key"), dict)
+        and isinstance(item.get("data"), dict)
+        for item in records
+    ):
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+    if any(set(record["key"]) != {"ts"} for record in records):
+        raise ValueError(ERROR_MALFORMED_NDJSON)
+
+
+def _scope_key(header: dict[str, Any]) -> str:
+    return json.dumps(
+        [header["sourceId"], header["deviceId"], header["stream"], header["batchId"]],
+        separators=(",", ":"),
+    )
+
+
+def _record_key(header: dict[str, Any], record: dict[str, Any]) -> str:
+    return json.dumps(
+        [header["sourceId"], header["deviceId"], header["stream"], record["key"]],
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _latest_entities(records: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    latest: dict[str, Any] = {}
+    for record in records.values():
+        scope = (record["deviceId"], record["stream"])
+        current = latest.get(scope)
+        if current is None or record["primaryKey"]["ts"] > current["primaryKey"]["ts"]:
+            latest[scope] = record
+    return {f"{device}:{stream}": record for (device, stream), record in latest.items()}

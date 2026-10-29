@@ -7,9 +7,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN, STORAGE_KEY, STORAGE_VERSION
+from .coordinator import NoopPushCoordinator
 from .http import NoopPushView
 
-PLATFORMS: list[str] = []
+PLATFORMS: list[str] = ["sensor", "binary_sensor"]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -26,13 +27,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data.setdefault("version", STORAGE_VERSION)
     await store.async_save(data)
 
-    view = NoopPushView(hass, entry, store, data["receiverStateId"])
+    coordinator = NoopPushCoordinator(hass)
+    coordinator.data = data.get("latest", {})
+    view = NoopPushView(hass, entry, store, data["receiverStateId"], coordinator)
     hass.http.register_view(view)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "store": store,
         "view": view,
         "receiver_state_id": data["receiverStateId"],
+        "coordinator": coordinator,
     }
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
@@ -41,5 +46,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if runtime is None:
         return True
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     hass.http.unregister_view(runtime["view"].name)
-    return True
+    return unload_ok
