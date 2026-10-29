@@ -29,8 +29,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinator = NoopPushCoordinator(hass)
     coordinator.data = data.get("latest", {})
-    view = NoopPushView(hass, entry, store, data["receiverStateId"], coordinator)
-    hass.http.register_view(view)
+    view = hass.data[DOMAIN].get("http_view")
+    if view is None:
+        view = NoopPushView(hass, entry, store, data["receiverStateId"], coordinator)
+        hass.http.register_view(view)
+        hass.data[DOMAIN]["http_view"] = view
+    else:
+        view.configure(entry, store, data["receiverStateId"], coordinator)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "store": store,
         "view": view,
@@ -47,5 +52,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if runtime is None:
         return True
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    hass.http.unregister_view(runtime["view"].name)
+    runtime["view"].deactivate()
     return unload_ok

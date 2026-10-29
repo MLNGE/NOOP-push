@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "NOOP Push",
-        "description": "Endpoint: {endpoint}",
+        "description": "Configure the NOOP Push receiver.",
         "data": {
           "token": "Bearer token",
           "streams": "Enabled streams",

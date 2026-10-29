@@ -58,8 +58,27 @@ class NoopPushView(HomeAssistantView):
         self.receiver_state_id = receiver_state_id
         self.coordinator = coordinator
         self._lock = Lock()
+        self._active = True
         self._entity_adder = None
         self._known_entity_keys: set[str] = set()
+
+    def configure(
+        self,
+        entry: ConfigEntry,
+        store: Store,
+        receiver_state_id: str,
+        coordinator: NoopPushCoordinator,
+    ) -> None:
+        """Attach the view to an active config entry."""
+        self.entry = entry
+        self.store = store
+        self.receiver_state_id = receiver_state_id
+        self.coordinator = coordinator
+        self._active = True
+
+    def deactivate(self) -> None:
+        """Disable requests after the config entry unloads."""
+        self._active = False
 
     def set_entity_adder(self, entity_adder, known_entity_keys: set[str]) -> None:
         """Register the platform callback used for newly discovered devices."""
@@ -68,6 +87,8 @@ class NoopPushView(HomeAssistantView):
 
     async def get(self, request: web.Request) -> web.Response:
         """Return capabilities for a valid protocol request."""
+        if not self._active:
+            return _error(404, "not_found")
         error = self._authorize(request)
         if error is not None:
             return error
@@ -87,6 +108,8 @@ class NoopPushView(HomeAssistantView):
 
     async def post(self, request: web.Request) -> web.Response:
         """Ingest an append batch."""
+        if not self._active:
+            return _error(404, "not_found")
         error = self._authorize(request)
         if error is not None:
             return error
