@@ -8,6 +8,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_TOKEN
 from homeassistant.core import callback
+from homeassistant.helpers import selector
 
 from .const import (
     CONF_DETAILED_DAILY,
@@ -46,8 +47,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(
             {
                 vol.Required(CONF_TOKEN): str,
-                vol.Required(CONF_STREAMS, default=list(SUPPORTED_STREAMS)): vol.All(
-                    cv_streams,
+                vol.Required(CONF_STREAMS, default=list(SUPPORTED_STREAMS)): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=list(SUPPORTED_STREAMS),
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
                 ),
                 vol.Required(CONF_DETAILED_DAILY, default=False): bool,
                 vol.Optional(CONF_RETENTION_DAYS, default=30): vol.All(
@@ -62,16 +67,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         return NoopPushOptionsFlow(config_entry)
-
-
-def cv_streams(value):
-    """Validate the selected stream names."""
-    streams = list(value)
-    if not streams or any(stream not in SUPPORTED_STREAMS for stream in streams):
-        raise vol.Invalid("unsupported stream")
-    return streams
-
-
 class NoopPushOptionsFlow(config_entries.OptionsFlow):
     """Handle NOOP Push options."""
 
