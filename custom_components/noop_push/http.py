@@ -347,6 +347,8 @@ class NoopPushView(HomeAssistantView):
             )
             if entities:
                 callback(entities)
+        if self.coordinator is not None:
+            self.coordinator.async_set_updated_data(data)
 
 
 def _error(status: int, code: str) -> web.Response:

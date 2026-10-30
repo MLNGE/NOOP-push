@@ -81,6 +81,11 @@ class NoopPushChargingSensor(CoordinatorEntity, NoopPushEntity):
                 self._key,
                 sorted(str(field) for field in record.get("payload", {})),
             )
+        else:
+            _LOGGER.debug(
+                "NOOP binary entity value resolved key=%s field=charging",
+                self._key,
+            )
         return value
 
 

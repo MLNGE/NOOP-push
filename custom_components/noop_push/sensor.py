@@ -132,6 +132,12 @@ class NoopPushSensor(CoordinatorEntity, NoopPushEntity):
                 self._field,
                 sorted(str(field) for field in record.get("payload", {})),
             )
+        else:
+            _LOGGER.debug(
+                "NOOP entity value resolved key=%s field=%s",
+                self._key,
+                self._field,
+            )
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP and value is not None:
             from datetime import UTC, datetime
 
