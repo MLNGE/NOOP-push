@@ -4,7 +4,7 @@ from aiohttp.test_utils import make_mocked_request
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.storage import Store
 
-from custom_components.noop_push.http import NoopPushView
+from custom_components.noop_push.http import NoopPushView, _append_record_keys
 from custom_components.noop_push import _logical_record_key
 from custom_components.noop_push.sensor import _field_value
 
@@ -31,6 +31,16 @@ def test_field_value_accepts_legacy_metric_names():
 
     assert _field_value(record, "distanceM") == 1234
     assert _field_value(record, "restingHr") == 52
+
+
+def test_append_record_keys_allow_existing_primary_keys():
+    """Append batches use idempotent upsert semantics."""
+    header = {"sourceId": "source", "deviceId": "device", "stream": "hrSample"}
+    records = [{"key": {"ts": 123}, "data": {"bpm": 60}}]
+
+    assert _append_record_keys(header, records) == [
+        '["source","device","hrSample",{"ts":123}]'
+    ]
 
 
 def _view(hass):
