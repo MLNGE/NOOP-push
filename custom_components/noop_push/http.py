@@ -153,12 +153,10 @@ class NoopPushView(HomeAssistantView):
                         return web.json_response(prior["ack"])
                     return _error(409, ERROR_DUPLICATE_KEY)
                 stored_records = data.setdefault("records", {})
-                try:
-                    _append_record_keys(storage_header, records)
-                except ValueError:
-                    return _error(409, ERROR_DUPLICATE_KEY)
-                for record in records:
-                    key = _record_key(storage_header, record)
+                records_by_key = _deduplicate_append_records(
+                    storage_header, records
+                )
+                for key, record in records_by_key.items():
                     stored_records[key] = {
                         "sourceId": header["sourceId"],
                         "deviceId": storage_header["deviceId"],
@@ -506,11 +504,18 @@ def _record_key(header: dict[str, Any], record: dict[str, Any]) -> str:
 def _append_record_keys(
     header: dict[str, Any], records: list[dict[str, Any]]
 ) -> list[str]:
-    """Return append keys, rejecting duplicate primary keys in one batch."""
-    keys = [_record_key(header, record) for record in records]
-    if len(set(keys)) != len(keys):
-        raise ValueError(ERROR_DUPLICATE_KEY)
-    return keys
+    """Return append keys for an append batch."""
+    return [_record_key(header, record) for record in records]
+
+
+def _deduplicate_append_records(
+    header: dict[str, Any], records: list[dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    """Keep the last row when a sender repeats an append primary key."""
+    return {
+        _record_key(header, record): record
+        for record in records
+    }
 
 
 def _latest_entities(records: dict[str, dict[str, Any]]) -> dict[str, Any]:

@@ -4,7 +4,11 @@ from aiohttp.test_utils import make_mocked_request
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.storage import Store
 
-from custom_components.noop_push.http import NoopPushView, _append_record_keys
+from custom_components.noop_push.http import (
+    NoopPushView,
+    _append_record_keys,
+    _deduplicate_append_records,
+)
 from custom_components.noop_push import _logical_record_key
 from custom_components.noop_push.sensor import _field_value
 
@@ -41,6 +45,7 @@ def test_append_record_keys_allow_existing_primary_keys():
     assert _append_record_keys(header, records) == [
         '["source","device","hrSample",{"ts":123}]'
     ]
+    assert len(_deduplicate_append_records(header, records + records)) == 1
 
 
 def _view(hass):
