@@ -113,12 +113,36 @@ class NoopPushSensor(CoordinatorEntity, NoopPushEntity):
     @property
     def native_value(self):
         record = _find_record(self.coordinator.data, self._key)
-        value = record.get("payload", {}).get(self._field) if record else None
+        value = _field_value(record, self._field) if record else None
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP and value is not None:
             from datetime import UTC, datetime
 
             return datetime.fromtimestamp(value, UTC)
         return value
+
+
+FIELD_ALIASES = {
+    "avgHr": ("avgHr", "averageHr"),
+    "restingHr": ("restingHr", "avgRhr"),
+    "avgHrv": ("avgHrv", "averageHrv"),
+    "respRateBpm": ("respRateBpm", "respRate"),
+    "skinTempDevC": ("skinTempDevC", "skinTemp"),
+    "totalSleepMin": ("totalSleepMin", "sleepMin"),
+    "distanceM": ("distanceM", "distance"),
+    "activeKcalEst": ("activeKcalEst", "activeCal"),
+    "totalKcal": ("totalKcal", "totalCal"),
+}
+
+
+def _field_value(record: dict, field: str):
+    """Return a protocol field, accepting names used by older senders."""
+    payload = record.get("payload", {})
+    if not isinstance(payload, dict):
+        return None
+    for candidate in FIELD_ALIASES.get(field, (field,)):
+        if candidate in payload:
+            return payload[candidate]
+    return None
 
 
 def _find_record(data: dict, key: str) -> dict | None:

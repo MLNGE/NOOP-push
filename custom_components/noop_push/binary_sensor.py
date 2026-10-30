@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .entity import NoopPushEntity
+from .sensor import _field_value
 
 
 async def async_setup_entry(
@@ -63,7 +64,7 @@ class NoopPushChargingSensor(CoordinatorEntity, NoopPushEntity):
     @property
     def is_on(self):
         record = _find_record(self.coordinator.data, self._key)
-        return record.get("payload", {}).get("charging") if record else None
+        return _field_value(record, "charging") if record else None
 
 
 def _find_record(data: dict, key: str) -> dict | None:

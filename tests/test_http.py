@@ -6,6 +6,7 @@ from homeassistant.helpers.storage import Store
 
 from custom_components.noop_push.http import NoopPushView
 from custom_components.noop_push import _logical_record_key
+from custom_components.noop_push.sensor import _field_value
 
 
 def test_logical_record_key_is_hashable():
@@ -22,6 +23,14 @@ def test_logical_record_key_is_hashable():
 
     assert isinstance(key, str)
     assert {key: record}[key] == record
+
+
+def test_field_value_accepts_legacy_metric_names():
+    """Entity values work with both canonical and legacy payload names."""
+    record = {"payload": {"distance": 1234, "avgRhr": 52}}
+
+    assert _field_value(record, "distanceM") == 1234
+    assert _field_value(record, "restingHr") == 52
 
 
 def _view(hass):
