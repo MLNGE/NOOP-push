@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import logging
 import secrets
 from asyncio import Lock
 from typing import Any
@@ -37,6 +38,8 @@ from .const import (
     REPLACEMENT_STREAMS,
 )
 from .coordinator import NoopPushCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class NoopPushView(HomeAssistantView):
@@ -178,6 +181,24 @@ class NoopPushView(HomeAssistantView):
                 }
                 acknowledgements[ack_key] = {"payloadHash": payload_hash, "ack": ack}
                 data["latest"] = _latest_entities(stored_records)
+                _LOGGER.debug(
+                    "Accepted NOOP batch stream=%s records=%d latest_fields=%s",
+                    header["stream"],
+                    len(records),
+                    {
+                        stream: sorted(
+                            {
+                                field
+                                for record in data["latest"].values()
+                                if record["stream"] == stream
+                                for field in record["payload"]
+                            }
+                        )
+                        for stream in {
+                            record["stream"] for record in data["latest"].values()
+                        }
+                    },
+                )
                 await self.store.async_save(data)
                 if self.coordinator is not None:
                     self.coordinator.async_set_updated_data(data["latest"])
