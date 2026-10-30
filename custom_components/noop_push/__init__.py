@@ -77,4 +77,4 @@ def _logical_record_key(record):
         "deviceId": record["sourceId"],
         "stream": record["stream"],
     }
-    return _record_key(header, {"key": record["primaryKey"]}), record
+    return _record_key(header, {"key": record["primaryKey"]})

@@ -5,6 +5,23 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.storage import Store
 
 from custom_components.noop_push.http import NoopPushView
+from custom_components.noop_push import _logical_record_key
+
+
+def test_logical_record_key_is_hashable():
+    """Persisted records can be rebuilt during integration startup."""
+    record = {
+        "sourceId": "source",
+        "deviceId": "device",
+        "stream": "hrSample",
+        "primaryKey": {"ts": 123},
+        "payload": {"bpm": 60},
+    }
+
+    key = _logical_record_key(record)
+
+    assert isinstance(key, str)
+    assert {key: record}[key] == record
 
 
 def _view(hass):
