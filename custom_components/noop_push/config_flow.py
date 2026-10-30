@@ -66,7 +66,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return NoopPushOptionsFlow(config_entry)
+        return NoopPushOptionsFlow()
+
+
 class NoopPushOptionsFlow(config_entries.OptionsFlow):
     """Handle NOOP Push options."""
 
