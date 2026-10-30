@@ -34,7 +34,7 @@ async def async_setup_entry(
         runtime["known_binary_entity_keys"],
     )
     _LOGGER.debug("NOOP binary sensor setup created=%d", len(entities))
-    async_add_entities(entities)
+    async_add_entities(entities, update_before_add=True)
 
 
 def create_entities(coordinator, data: dict, known: set[str]) -> list:

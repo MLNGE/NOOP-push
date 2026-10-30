@@ -346,7 +346,7 @@ class NoopPushView(HomeAssistantView):
                 self._known_entity_keys.setdefault(platform, set()),
             )
             if entities:
-                callback(entities)
+                callback(entities, True)
         if self.coordinator is not None:
             self.coordinator.async_set_updated_data(data)
 

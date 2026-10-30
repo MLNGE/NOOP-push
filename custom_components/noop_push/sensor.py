@@ -68,7 +68,7 @@ async def async_setup_entry(
         len(entities),
         sorted(str(key) for key in runtime["coordinator"].data),
     )
-    async_add_entities(entities)
+    async_add_entities(entities, update_before_add=True)
 
 
 def create_entities(coordinator, data: dict, known: set[str]) -> list:
