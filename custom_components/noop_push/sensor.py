@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -17,6 +19,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .entity import NoopPushEntity
+
+_LOGGER = logging.getLogger(__name__)
 
 DAILY_FIELDS = {
     "recovery": ("recovery", None, SensorStateClass.MEASUREMENT, None),
@@ -114,6 +118,20 @@ class NoopPushSensor(CoordinatorEntity, NoopPushEntity):
     def native_value(self):
         record = _find_record(self.coordinator.data, self._key)
         value = _field_value(record, self._field) if record else None
+        if record is None:
+            _LOGGER.debug(
+                "NOOP entity lookup missed key=%s field=%s coordinator_keys=%s",
+                self._key,
+                self._field,
+                sorted(str(key) for key in self.coordinator.data),
+            )
+        elif value is None:
+            _LOGGER.debug(
+                "NOOP entity field missing key=%s field=%s payload_fields=%s",
+                self._key,
+                self._field,
+                sorted(str(field) for field in record.get("payload", {})),
+            )
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP and value is not None:
             from datetime import UTC, datetime
 

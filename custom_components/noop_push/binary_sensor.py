@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.core import HomeAssistant
@@ -11,6 +13,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .entity import NoopPushEntity
 from .sensor import _field_value
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -64,7 +68,20 @@ class NoopPushChargingSensor(CoordinatorEntity, NoopPushEntity):
     @property
     def is_on(self):
         record = _find_record(self.coordinator.data, self._key)
-        return _field_value(record, "charging") if record else None
+        value = _field_value(record, "charging") if record else None
+        if record is None:
+            _LOGGER.debug(
+                "NOOP binary entity lookup missed key=%s coordinator_keys=%s",
+                self._key,
+                sorted(str(key) for key in self.coordinator.data),
+            )
+        elif value is None:
+            _LOGGER.debug(
+                "NOOP binary entity field missing key=%s payload_fields=%s",
+                self._key,
+                sorted(str(field) for field in record.get("payload", {})),
+            )
+        return value
 
 
 def _find_record(data: dict, key: str) -> dict | None:
