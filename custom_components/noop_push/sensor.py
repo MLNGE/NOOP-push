@@ -58,7 +58,17 @@ async def async_setup_entry(
     runtime = hass.data[DOMAIN][entry.entry_id]
     runtime["known_entity_keys"] = set()
     runtime["view"].set_entity_adder("sensor", async_add_entities, runtime["known_entity_keys"])
-    async_add_entities(create_entities(runtime["coordinator"], runtime["coordinator"].data, runtime["known_entity_keys"]))
+    entities = create_entities(
+        runtime["coordinator"],
+        runtime["coordinator"].data,
+        runtime["known_entity_keys"],
+    )
+    _LOGGER.debug(
+        "NOOP sensor setup created=%d coordinator_keys=%s",
+        len(entities),
+        sorted(str(key) for key in runtime["coordinator"].data),
+    )
+    async_add_entities(entities)
 
 
 def create_entities(coordinator, data: dict, known: set[str]) -> list:
@@ -86,6 +96,12 @@ def create_entities(coordinator, data: dict, known: set[str]) -> list:
             if unique_id in known:
                 continue
             known.add(unique_id)
+            _LOGGER.debug(
+                "NOOP creating sensor unique_id=%s key=%s field=%s",
+                unique_id,
+                key,
+                field,
+            )
             entities.append(
                 NoopPushSensor(coordinator, source_id, device_id, stream, field, suffix, definition)
             )

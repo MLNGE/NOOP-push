@@ -28,13 +28,13 @@ async def async_setup_entry(
     runtime["view"].set_entity_adder(
         "binary_sensor", async_add_entities, runtime["known_binary_entity_keys"]
     )
-    async_add_entities(
-        create_entities(
-            runtime["coordinator"],
-            runtime["coordinator"].data,
-            runtime["known_binary_entity_keys"],
-        )
+    entities = create_entities(
+        runtime["coordinator"],
+        runtime["coordinator"].data,
+        runtime["known_binary_entity_keys"],
     )
+    _LOGGER.debug("NOOP binary sensor setup created=%d", len(entities))
+    async_add_entities(entities)
 
 
 def create_entities(coordinator, data: dict, known: set[str]) -> list:
@@ -48,6 +48,11 @@ def create_entities(coordinator, data: dict, known: set[str]) -> list:
         if unique_id in known:
             continue
         known.add(unique_id)
+        _LOGGER.debug(
+            "NOOP creating binary sensor unique_id=%s key=%s",
+            unique_id,
+            key,
+        )
         entities.append(
             NoopPushChargingSensor(coordinator, source_id, device_id, stream)
         )
