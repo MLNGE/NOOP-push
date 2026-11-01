@@ -2,6 +2,8 @@
 
 <img src="logo.png" alt="NOOP Push logo" width="160">
 
+[Support this project](https://buymeacoffee.com/timgerr)
+
 NOOP Push receives health data from the [NOOP app](https://github.com/ryanbr/noop)
 and creates Home Assistant sensors for heart rate, steps, sleep, recovery,
 strain, calories, battery, and other supported metrics.
