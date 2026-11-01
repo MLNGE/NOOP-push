@@ -36,6 +36,7 @@ from .const import (
     MAX_RECORDS,
     PROTOCOL_VERSION,
     REPLACEMENT_STREAMS,
+    CONF_VERBOSE_LOGGING,
 )
 from .coordinator import NoopPushCoordinator
 
@@ -135,17 +136,18 @@ class NoopPushView(HomeAssistantView):
         except ValueError as err:
             code = str(err)
             return _error(422 if code == ERROR_UNSUPPORTED_STREAM else 400, code)
-        for index, record in enumerate(records, start=1):
-            _LOGGER.debug(
-                "Received NOOP data point index=%d stream=%s source_id=%s "
-                "device_id=%s key=%s data=%s",
-                index,
-                header["stream"],
-                header["sourceId"],
-                header["deviceId"],
-                record["key"],
-                record["data"],
-            )
+        if self._verbose_logging_enabled:
+            for index, record in enumerate(records, start=1):
+                _LOGGER.debug(
+                    "Received NOOP data point index=%d stream=%s source_id=%s "
+                    "device_id=%s key=%s data=%s",
+                    index,
+                    header["stream"],
+                    header["sourceId"],
+                    header["deviceId"],
+                    record["key"],
+                    record["data"],
+                )
         if header["stream"] not in APPEND_STREAMS:
             if header["stream"] not in REPLACEMENT_STREAMS:
                 return _error(422, ERROR_UNSUPPORTED_STREAM)
@@ -188,19 +190,21 @@ class NoopPushView(HomeAssistantView):
                 }
                 acknowledgements[ack_key] = {"payloadHash": payload_hash, "ack": ack}
                 data["latest"] = _latest_entities(stored_records)
-                _LOGGER.debug(
-                    "Accepted NOOP batch stream=%s records=%d latest_values=%s",
-                    header["stream"],
-                    len(records),
-                    {
-                        stream: record["payload"]
-                        for stream in {
-                            record["stream"] for record in data["latest"].values()
-                        }
-                        for record in data["latest"].values()
-                        if record["stream"] == stream
-                    },
-                )
+                if self._verbose_logging_enabled:
+                    _LOGGER.debug(
+                        "Accepted NOOP batch stream=%s records=%d latest_values=%s",
+                        header["stream"],
+                        len(records),
+                        {
+                            stream: record["payload"]
+                            for stream in {
+                                record["stream"]
+                                for record in data["latest"].values()
+                            }
+                            for record in data["latest"].values()
+                            if record["stream"] == stream
+                        },
+                    )
                 await self.store.async_save(data)
                 if self.coordinator is not None:
                     self.coordinator.async_set_updated_data(data["latest"])
@@ -305,19 +309,21 @@ class NoopPushView(HomeAssistantView):
                 }
                 del staging[stage_key]
                 data["latest"] = _latest_entities(stored_records)
-                _LOGGER.debug(
-                    "Accepted NOOP replacement stream=%s records=%d latest_values=%s",
-                    header["stream"],
-                    len(complete_records),
-                    {
-                        stream: record["payload"]
-                        for stream in {
-                            record["stream"] for record in data["latest"].values()
-                        }
-                        for record in data["latest"].values()
-                        if record["stream"] == stream
-                    },
-                )
+                if self._verbose_logging_enabled:
+                    _LOGGER.debug(
+                        "Accepted NOOP replacement stream=%s records=%d latest_values=%s",
+                        header["stream"],
+                        len(complete_records),
+                        {
+                            stream: record["payload"]
+                            for stream in {
+                                record["stream"]
+                                for record in data["latest"].values()
+                            }
+                            for record in data["latest"].values()
+                            if record["stream"] == stream
+                        },
+                    )
                 await self.store.async_save(data)
                 if self.coordinator is not None:
                     self.coordinator.async_set_updated_data(data["latest"])
@@ -335,6 +341,10 @@ class NoopPushView(HomeAssistantView):
     def _storage_header(self, header: dict[str, Any]) -> dict[str, Any]:
         """Group all device IDs from one NOOP installation together."""
         return {**header, "deviceId": header["sourceId"]}
+
+    @property
+    def _verbose_logging_enabled(self) -> bool:
+        return bool(self.entry.options.get(CONF_VERBOSE_LOGGING, False))
 
     def _authorize(self, request: web.Request) -> web.Response | None:
         authorization = request.headers.get("Authorization", "")

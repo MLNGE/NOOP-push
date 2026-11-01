@@ -1,7 +1,7 @@
 {
   "domain": "noop_push",
   "name": "NOOP Push",
-  "version": "0.1.14",
+  "version": "0.1.17",
   "documentation": "https://github.com/<user>/ha-noop-push",
   "issue_tracker": "https://github.com/<user>/ha-noop-push/issues",
   "codeowners": ["@<user>"],

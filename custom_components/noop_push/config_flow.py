@@ -15,6 +15,7 @@ from .const import (
     CONF_RECEIVER_STATE_ID,
     CONF_RETENTION_DAYS,
     CONF_STREAMS,
+    CONF_VERBOSE_LOGGING,
     DOMAIN,
     SUPPORTED_STREAMS,
 )
@@ -87,6 +88,10 @@ class NoopPushOptionsFlow(config_entries.OptionsFlow):
                         CONF_RETENTION_DAYS,
                         default=self.config_entry.data.get(CONF_RETENTION_DAYS, 30),
                     ): vol.All(vol.Coerce(int), vol.Range(min=0)),
+                    vol.Required(
+                        CONF_VERBOSE_LOGGING,
+                        default=self.config_entry.options.get(CONF_VERBOSE_LOGGING, False),
+                    ): bool,
                 }
             ),
         )

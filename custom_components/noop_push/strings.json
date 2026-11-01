@@ -15,5 +15,17 @@
     "error": {
       "required": "A non-empty token is required"
     }
+  },
+  "options": {
+      "step": {
+        "init": {
+          "title": "NOOP Push options",
+          "data": {
+            "detailed_daily": "Create detailed daily sensors",
+            "retention_days": "Append retention (days)",
+            "verbose_logging": "Enable extensive data logging"
+          }
+        }
+    }
   }
 }

@@ -13,6 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
     UnitOfEnergy,
+    UnitOfElectricPotential,
     UnitOfLength,
     UnitOfTime,
     UnitOfTemperature,
@@ -35,6 +36,15 @@ DAILY_FIELDS = {
     "respRateBpm": ("respiratory_rate", None, SensorStateClass.MEASUREMENT, "breaths/min"),
     "skinTempDevC": ("skin_temperature", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, UnitOfTemperature.CELSIUS),
     "totalSleepMin": ("sleep_minutes", SensorDeviceClass.DURATION, SensorStateClass.MEASUREMENT, UnitOfTime.MINUTES),
+    "deepMin": ("deep_sleep_minutes", SensorDeviceClass.DURATION, SensorStateClass.MEASUREMENT, UnitOfTime.MINUTES),
+    "lightMin": ("light_sleep_minutes", SensorDeviceClass.DURATION, SensorStateClass.MEASUREMENT, UnitOfTime.MINUTES),
+    "remMin": ("rem_sleep_minutes", SensorDeviceClass.DURATION, SensorStateClass.MEASUREMENT, UnitOfTime.MINUTES),
+    "disturbances": ("sleep_disturbances", None, SensorStateClass.MEASUREMENT, None),
+    "efficiency": ("sleep_efficiency", None, SensorStateClass.MEASUREMENT, None),
+    "exerciseCount": ("exercise_count", None, SensorStateClass.MEASUREMENT, None),
+    "spo2Pct": ("spo2", None, SensorStateClass.MEASUREMENT, PERCENTAGE),
+    "spo2Ir": ("spo2_infrared", None, SensorStateClass.MEASUREMENT, None),
+    "spo2Red": ("spo2_red", None, SensorStateClass.MEASUREMENT, None),
     "steps": ("steps", None, SensorStateClass.TOTAL_INCREASING, None),
     "distanceM": ("distance_meters", None, SensorStateClass.TOTAL_INCREASING, UnitOfLength.METERS),
     "activeKcalEst": ("active_calories", SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, UnitOfEnergy.KILO_CALORIE),
@@ -84,7 +94,10 @@ def create_entities(coordinator, data: dict, known: set[str]) -> list:
         if stream == "hrSample":
             definitions = {"bpm": ("heart_rate", None, "bpm")}
         elif stream == "battery":
-            definitions = {"soc": ("battery", SensorDeviceClass.BATTERY, PERCENTAGE)}
+            definitions = {
+                "soc": ("battery", SensorDeviceClass.BATTERY, PERCENTAGE),
+                "mv": ("battery_voltage", SensorDeviceClass.VOLTAGE, UnitOfElectricPotential.MILLIVOLT),
+            }
         elif stream == "dailyMetric":
             definitions = DAILY_FIELDS
         elif stream == "sleepSession":

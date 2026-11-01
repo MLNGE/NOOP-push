@@ -3,7 +3,8 @@
 Receive health data exported by the [NOOP app](https://github.com/ryanbr/noop)
 directly in Home Assistant through a self-hosted HTTP(S) push receiver.
 
-> **Status:** early release (`0.1.4`). The integration is suitable for testing
+> **Status:** early release. The current version is recorded in the integration
+> manifest. The integration is suitable for testing
 > the NOOP Push protocol and receiving the supported streams. Review the
 > limitations below before using it as a long-term data archive.
 
@@ -63,6 +64,14 @@ This repository is currently installed as a custom HACS repository:
 6. Install **NOOP Push**.
 7. Restart Home Assistant.
 
+## Releases
+
+Versions are kept synchronized in `custom_components/noop_push/manifest.json`
+and `pyproject.toml`. To create a release, run the **Release** GitHub Actions
+workflow manually and enter a semantic version such as `0.1.15`. The workflow
+updates both version files, commits the bump to `main`, creates a matching
+`v0.1.15` tag, and publishes GitHub release notes.
+
 ## Configuration
 
 1. Open **Settings → Devices & services**.
@@ -104,14 +113,10 @@ state, attributes, diagnostics, or logbook entries.
 - Duplicate primary keys return `409`.
 - Unsupported streams return `422`.
 
-To enable the import diagnostics temporarily, add this to Home Assistant's
-`configuration.yaml` and restart:
-
-```yaml
-logger:
-  logs:
-    custom_components.noop_push: debug
-```
+Enable **Extensive data logging** from the NOOP Push integration options when
+you need to inspect incoming keys and values. It is disabled by default.
+Home Assistant's `custom_components.noop_push` logger must still be set to
+`debug` to display debug messages.
 
 ## Entity organization
 

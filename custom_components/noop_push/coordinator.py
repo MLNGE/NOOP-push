@@ -16,4 +16,4 @@ class NoopPushCoordinator(DataUpdateCoordinator[dict]):
         super().__init__(hass, logger=_LOGGER, name="NOOP Push")
 
     async def _async_update_data(self) -> dict:
-        return {}
+        return self.data
