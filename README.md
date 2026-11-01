@@ -66,11 +66,10 @@ This repository is currently installed as a custom HACS repository:
 
 ## Releases
 
-Versions are kept synchronized in `custom_components/noop_push/manifest.json`
-and `pyproject.toml`. To create a release, run the **Release** GitHub Actions
-workflow manually and enter a semantic version such as `0.1.15`. The workflow
-updates both version files, commits the bump to `main`, creates a matching
-`v0.1.15` tag, and publishes GitHub release notes.
+The version in `custom_components/noop_push/manifest.json` controls releases.
+When that file is pushed to `main` or `master`, the **Release** GitHub Actions
+workflow creates a matching `v<version>` tag and publishes release notes from
+the commits since the previous tag. Existing tags are skipped.
 
 ## Configuration
 

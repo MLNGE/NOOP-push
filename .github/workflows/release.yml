@@ -1,90 +1,66 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Release version without the v prefix (for example 0.1.15)"
-        required: true
-        type: string
-
-permissions:
-  contents: write
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "custom_components/noop_push/manifest.json"
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
-      - name: Check out repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Update and validate version
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
+      - name: Get version from manifest
+        id: version
         run: |
-          python - <<'PY'
-          import json
-          import os
-          import re
-          from pathlib import Path
+          VERSION=$(python -c 'import json; print(json.load(open("custom_components/noop_push/manifest.json"))["version"])')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Found version: $VERSION"
 
-          version = os.environ["RELEASE_VERSION"].strip()
-          if not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version):
-              raise SystemExit("version must use MAJOR.MINOR.PATCH format")
-
-          manifest_path = Path("custom_components/noop_push/manifest.json")
-          pyproject_path = Path("pyproject.toml")
-
-          manifest = json.loads(manifest_path.read_text())
-          current_manifest_version = manifest["version"]
-          pyproject = pyproject_path.read_text()
-          match = re.search(r'(?m)^version = "([^"]+)"$', pyproject)
-          if match is None:
-              raise SystemExit("version entry not found in pyproject.toml")
-          current_pyproject_version = match.group(1)
-
-          if current_manifest_version != current_pyproject_version:
-              raise SystemExit(
-                  "manifest.json and pyproject.toml have different versions"
-              )
-
-          tag = f"v{version}"
-          if os.system(f"git show-ref --tags --verify --quiet refs/tags/{tag}") == 0:
-              raise SystemExit(f"tag already exists: {tag}")
-
-          manifest["version"] = version
-          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-          pyproject_path.write_text(
-              pyproject[:match.start(1)] + version + pyproject[match.end(1):]
-          )
-          PY
-
-      - name: Run syntax validation
-        run: python -m compileall -q custom_components/noop_push
-
-      - name: Commit version bump
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
+      - name: Get commit messages since last tag
+        id: changelog
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add custom_components/noop_push/manifest.json pyproject.toml
-          git commit -m "Release v${RELEASE_VERSION}"
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-      - name: Create tag
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
-        run: git tag -a "v${RELEASE_VERSION}" -m "Release v${RELEASE_VERSION}"
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges)
+          else
+            COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --no-merges)
+          fi
 
-      - name: Push version bump and tag
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
-        run: git push origin HEAD:main "v${RELEASE_VERSION}"
+          if [ -z "$COMMITS" ]; then
+            COMMITS="Release v${{ steps.version.outputs.version }}"
+          fi
 
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.version }}
-        run: gh release create "v${RELEASE_VERSION}" --title "NOOP Push v${RELEASE_VERSION}" --generate-notes
+          {
+            echo "changelog<<EOF"
+            echo "$COMMITS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Release
+        if: steps.check_tag.outputs.exists == 'false' && steps.version.outputs.version != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: NOOP Push v${{ steps.version.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
