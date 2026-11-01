@@ -1,6 +1,6 @@
 # NOOP Push for Home Assistant
 
-![NOOP Push logo](logo.png)
+<img src="logo.png" alt="NOOP Push logo" width="160">
 
 NOOP Push receives health data from the [NOOP app](https://github.com/ryanbr/noop)
 and creates Home Assistant sensors for heart rate, steps, sleep, recovery,
