@@ -94,13 +94,24 @@ state, attributes, diagnostics, or logbook entries.
 - Every request requires a bearer token.
 - The decoded NDJSON payload is limited to 4 MiB.
 - A batch may contain at most 5,000 records.
-- Authorization headers and health-record payloads must not be logged.
+- Authorization headers are never logged. With debug logging enabled, incoming
+  health-record keys and values are logged to diagnose imports; disable debug
+  logging when troubleshooting is complete.
 - Invalid credentials return `401`.
 - Unsupported protocol versions return `406`.
 - Unsupported media types return `415`.
 - Malformed payloads return `400`.
 - Duplicate primary keys return `409`.
 - Unsupported streams return `422`.
+
+To enable the import diagnostics temporarily, add this to Home Assistant's
+`configuration.yaml` and restart:
+
+```yaml
+logger:
+  logs:
+    custom_components.noop_push: debug
+```
 
 ## Entity organization
 

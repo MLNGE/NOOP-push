@@ -88,8 +88,9 @@ class NoopPushChargingSensor(CoordinatorEntity, NoopPushEntity):
             )
         else:
             _LOGGER.debug(
-                "NOOP binary entity value resolved key=%s field=charging",
+                "NOOP binary entity value resolved key=%s field=charging value=%r",
                 self._key,
+                value,
             )
         return value
 

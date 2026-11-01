@@ -150,9 +150,10 @@ class NoopPushSensor(CoordinatorEntity, NoopPushEntity):
             )
         else:
             _LOGGER.debug(
-                "NOOP entity value resolved key=%s field=%s",
+                "NOOP entity value resolved key=%s field=%s value=%r",
                 self._key,
                 self._field,
+                value,
             )
         if self._attr_device_class == SensorDeviceClass.TIMESTAMP and value is not None:
             from datetime import UTC, datetime
