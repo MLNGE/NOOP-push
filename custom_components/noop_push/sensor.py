@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
@@ -108,7 +112,7 @@ def create_entities(coordinator, data: dict, known: set[str]) -> list:
     return entities
 
 
-class NoopPushSensor(CoordinatorEntity, NoopPushEntity):
+class NoopPushSensor(CoordinatorEntity, SensorEntity, NoopPushEntity):
     """Expose one NOOP field as a Home Assistant sensor."""
 
     def __init__(self, coordinator, source_id, device_id, stream, field, suffix, definition):

@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -59,7 +62,9 @@ def create_entities(coordinator, data: dict, known: set[str]) -> list:
     return entities
 
 
-class NoopPushChargingSensor(CoordinatorEntity, NoopPushEntity):
+class NoopPushChargingSensor(
+    CoordinatorEntity, BinarySensorEntity, NoopPushEntity
+):
     """Expose battery charging state."""
 
     def __init__(self, coordinator, source_id, device_id, stream):
