@@ -1,6 +1,6 @@
 # NOOP Push for Home Assistant
 
-<img src="logo.png" alt="NOOP Push logo" width="160">
+<img src="custom_components/noop_push/brand/logo.png" alt="NOOP Push logo" width="160">
 
 [Support this project](https://buymeacoffee.com/timgerr)
 
