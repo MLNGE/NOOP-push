@@ -37,6 +37,14 @@ def test_field_value_accepts_legacy_metric_names():
     assert _field_value(record, "restingHr") == 52
 
 
+def test_field_value_exposes_charge_and_rest_aliases():
+    """Expose the app's charge/rest names from canonical protocol metrics."""
+    record = {"payload": {"strain": 18, "recovery": 93}}
+
+    assert _field_value(record, "charge") == 18
+    assert _field_value(record, "rest") == 93
+
+
 def test_append_record_keys_allow_existing_primary_keys():
     """Append batches use idempotent upsert semantics."""
     header = {"sourceId": "source", "deviceId": "device", "stream": "hrSample"}

@@ -30,6 +30,8 @@ _LOGGER = logging.getLogger(__name__)
 DAILY_FIELDS = {
     "recovery": ("recovery", None, SensorStateClass.MEASUREMENT, None),
     "strain": ("strain", None, SensorStateClass.MEASUREMENT, None),
+    "rest": ("rest", None, SensorStateClass.MEASUREMENT, None),
+    "charge": ("charge", None, SensorStateClass.MEASUREMENT, None),
     "avgHr": ("avg_heart_rate", None, SensorStateClass.MEASUREMENT, "bpm"),
     "restingHr": ("resting_heart_rate", None, SensorStateClass.MEASUREMENT, "bpm"),
     "avgHrv": ("avg_hrv", None, SensorStateClass.MEASUREMENT, "ms"),
@@ -180,6 +182,8 @@ class NoopPushSensor(CoordinatorEntity, SensorEntity, NoopPushEntity):
 
 
 FIELD_ALIASES = {
+    "rest": ("rest", "recovery"),
+    "charge": ("charge", "strain"),
     "avgHr": ("avgHr", "averageHr"),
     "restingHr": ("restingHr", "avgRhr"),
     "avgHrv": ("avgHrv", "averageHrv"),
