@@ -72,7 +72,7 @@ class NoopPushChargingSensor(
         NoopPushEntity.__init__(self, source_id, device_id)
         self._key = f"{source_id}|{device_id}|{stream}"
         self._attr_unique_id = f"noop_push_{source_id}_{device_id}_battery_charging"
-        self._attr_name = "NOOP Battery Charging"
+        self._attr_name = "Battery Charging"
         self._attr_device_class = BinarySensorDeviceClass.BATTERY_CHARGING
 
     @property

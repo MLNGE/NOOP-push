@@ -28,10 +28,8 @@ from .entity import NoopPushEntity
 _LOGGER = logging.getLogger(__name__)
 
 DAILY_FIELDS = {
-    "recovery": ("recovery", None, SensorStateClass.MEASUREMENT, None),
-    "strain": ("strain", None, SensorStateClass.MEASUREMENT, None),
-    "rest": ("rest", None, SensorStateClass.MEASUREMENT, None),
-    "charge": ("charge", None, SensorStateClass.MEASUREMENT, None),
+    "recovery": ("charge", None, SensorStateClass.MEASUREMENT, None),
+    "strain": ("effort", None, SensorStateClass.MEASUREMENT, None),
     "avgHr": ("avg_heart_rate", None, SensorStateClass.MEASUREMENT, "bpm"),
     "restingHr": ("resting_heart_rate", None, SensorStateClass.MEASUREMENT, "bpm"),
     "avgHrv": ("avg_hrv", None, SensorStateClass.MEASUREMENT, "ms"),
@@ -137,7 +135,13 @@ class NoopPushSensor(CoordinatorEntity, SensorEntity, NoopPushEntity):
         self._field = field
         self._key = f"{source_id}|{device_id}|{stream}"
         self._attr_unique_id = f"noop_push_{source_id}_{device_id}_{suffix}"
-        self._attr_name = f"NOOP {suffix.replace('_', ' ').title()}"
+        group = {
+            "hrSample": "Live",
+            "battery": "Battery",
+            "dailyMetric": "Daily",
+            "sleepSession": "Sleep",
+        }[stream]
+        self._attr_name = f"{group} {suffix.replace('_', ' ').title()}"
         device_class, state_class, unit = (
             (definition[1], definition[2], definition[3])
             if stream == "dailyMetric"
@@ -182,8 +186,6 @@ class NoopPushSensor(CoordinatorEntity, SensorEntity, NoopPushEntity):
 
 
 FIELD_ALIASES = {
-    "rest": ("rest", "recovery"),
-    "charge": ("charge", "strain"),
     "avgHr": ("avgHr", "averageHr"),
     "restingHr": ("restingHr", "avgRhr"),
     "avgHrv": ("avgHrv", "averageHrv"),

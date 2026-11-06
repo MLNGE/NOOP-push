@@ -1,7 +1,7 @@
 {
   "domain": "noop_push",
   "name": "NOOP Push",
-  "version": "1.1.0",
+  "version": "1.1.5",
   "documentation": "https://github.com/MLNGE/ha-noop-push",
   "issue_tracker": "https://github.com/MLNGE/ha-noop-push/issues",
   "codeowners": ["@MLNGE"],

@@ -5,8 +5,8 @@
 [Support this project](https://buymeacoffee.com/timgerr)
 
 NOOP Push receives health data from the [NOOP app](https://github.com/ryanbr/noop)
-and creates Home Assistant sensors for heart rate, steps, sleep, recovery/rest,
-strain/charge, calories, battery, and other supported metrics.
+and creates Home Assistant sensors for heart rate, steps, sleep, Charge,
+Effort, calories, battery, and other supported metrics.
 
 - Data is sent one way from the app to Home Assistant.
 - The receiver uses a bearer token for authentication.
@@ -55,4 +55,5 @@ Tap **Save destination**, then **Test connection**. After the connection
 succeeds, enable local push in the app.
 
 The entities will appear under the NOOP Push device in Home Assistant as data
-arrives.
+arrives. They are grouped by name into Live, Daily, Sleep, and Battery
+categories within that device.
