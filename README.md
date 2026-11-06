@@ -56,4 +56,6 @@ succeeds, enable local push in the app.
 
 The entities will appear under the NOOP Push device in Home Assistant as data
 arrives. They are grouped by name into Live, Daily, Sleep, and Battery
-categories within that device.
+categories within that device. Daily Rest is calculated locally from the
+received sleep duration, efficiency, deep sleep, and REM sleep values using
+the NOOP scoring formula.

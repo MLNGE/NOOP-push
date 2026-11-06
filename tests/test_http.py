@@ -10,7 +10,7 @@ from custom_components.noop_push.http import (
     _deduplicate_append_records,
 )
 from custom_components.noop_push import _logical_record_key
-from custom_components.noop_push.sensor import _field_value
+from custom_components.noop_push.sensor import _field_value, _rest_value
 
 
 def test_logical_record_key_is_hashable():
@@ -43,6 +43,37 @@ def test_field_value_reads_charge_and_effort_protocol_metrics():
 
     assert _field_value(record, "recovery") == 93
     assert _field_value(record, "strain") == 18
+
+
+def test_rest_value_matches_noop_sleep_score():
+    """Calculate Rest using the NOOP app's daily sleep formula."""
+    record = {
+        "payload": {
+            "totalSleepMin": 564.133333333333,
+            "efficiency": 0.904591373135924,
+            "deepMin": 111.5,
+            "remMin": 183.95,
+        }
+    }
+
+    assert _rest_value(record) == 93.09
+
+
+def test_rest_value_requires_valid_sleep_metrics():
+    """Do not publish Rest when required sleep metrics are unavailable."""
+    assert _rest_value({"payload": {"totalSleepMin": 480}}) is None
+    assert _rest_value({"payload": {"totalSleepMin": 0, "efficiency": 1, "deepMin": 60, "remMin": 60}}) is None
+
+
+def test_sensor_precision_rounds_numeric_values():
+    """Entity values use stable precision instead of raw protocol decimals."""
+    from custom_components.noop_push.sensor import FIELD_PRECISION
+
+    assert FIELD_PRECISION.get("recovery", 0) == 0
+    assert FIELD_PRECISION.get("strain", 0) == 0
+    assert FIELD_PRECISION["rest"] == 0
+    assert FIELD_PRECISION["totalSleepMin"] == 1
+    assert FIELD_PRECISION["avgHrv"] == 2
 
 
 def test_append_record_keys_allow_existing_primary_keys():

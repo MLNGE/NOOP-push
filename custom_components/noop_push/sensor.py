@@ -30,6 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 DAILY_FIELDS = {
     "recovery": ("charge", None, SensorStateClass.MEASUREMENT, None),
     "strain": ("effort", None, SensorStateClass.MEASUREMENT, None),
+    "rest": ("rest", None, SensorStateClass.MEASUREMENT, None),
     "avgHr": ("avg_heart_rate", None, SensorStateClass.MEASUREMENT, "bpm"),
     "restingHr": ("resting_heart_rate", None, SensorStateClass.MEASUREMENT, "bpm"),
     "avgHrv": ("avg_hrv", None, SensorStateClass.MEASUREMENT, "ms"),
@@ -60,6 +61,18 @@ SLEEP_FIELDS = {
     "score": ("last_sleep_score", None, None),
     "startTs": ("last_sleep_start", SensorDeviceClass.TIMESTAMP, None),
     "endTs": ("last_sleep_end", SensorDeviceClass.TIMESTAMP, None),
+}
+
+FIELD_PRECISION = {
+    "avgHrv": 2,
+    "skinTempDevC": 1,
+    "totalSleepMin": 1,
+    "deepMin": 1,
+    "lightMin": 1,
+    "remMin": 1,
+    "distanceM": 1,
+    "rest": 0,
+    "efficiency": 2,
 }
 
 
@@ -152,11 +165,18 @@ class NoopPushSensor(CoordinatorEntity, SensorEntity, NoopPushEntity):
         self._attr_device_class = device_class
         self._attr_state_class = state_class
         self._attr_native_unit_of_measurement = unit
+        self._precision = FIELD_PRECISION.get(field, 0)
 
     @property
     def native_value(self):
         record = _find_record(self.coordinator.data, self._key)
-        value = _field_value(record, self._field) if record else None
+        value = (
+            _rest_value(record)
+            if record and self._field == "rest"
+            else _field_value(record, self._field)
+            if record
+            else None
+        )
         if record is None:
             _LOGGER.debug(
                 "NOOP entity lookup missed key=%s field=%s coordinator_keys=%s",
@@ -182,6 +202,8 @@ class NoopPushSensor(CoordinatorEntity, SensorEntity, NoopPushEntity):
             from datetime import UTC, datetime
 
             return datetime.fromtimestamp(value, UTC)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return round(value, self._precision)
         return value
 
 
@@ -207,6 +229,37 @@ def _field_value(record: dict, field: str):
         if candidate in payload:
             return payload[candidate]
     return None
+
+
+def _rest_value(record: dict) -> float | None:
+    """Calculate NOOP's Rest score from the daily sleep metrics."""
+    payload = record.get("payload", {})
+    if not isinstance(payload, dict):
+        return None
+    required = ("totalSleepMin", "efficiency", "deepMin", "remMin")
+    if any(field not in payload or not isinstance(payload[field], (int, float)) for field in required):
+        return None
+
+    sleep_minutes = float(payload["totalSleepMin"])
+    efficiency = float(payload["efficiency"])
+    deep_minutes = float(payload["deepMin"])
+    rem_minutes = float(payload["remMin"])
+    if sleep_minutes <= 0:
+        return None
+
+    duration_score = min(100.0, sleep_minutes / 60.0 / 8.0 * 100.0)
+    efficiency_score = min(100.0, max(0.0, efficiency * 100.0))
+    restorative_share = (deep_minutes + rem_minutes) / sleep_minutes
+    deep_adequacy = min(1.0, max(0.0, deep_minutes / sleep_minutes / 0.13))
+    deep_factor = 0.5 + 0.5 * deep_adequacy
+    restorative_score = min(100.0, restorative_share / 0.50 * 100.0) * deep_factor
+    score = (
+        0.50 * duration_score
+        + 0.20 * efficiency_score
+        + 0.20 * restorative_score
+        + 0.10 * 50.0
+    )
+    return round(score, 2)
 
 
 def _find_record(data: dict, key: str) -> dict | None:
